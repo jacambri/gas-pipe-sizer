@@ -1,10 +1,18 @@
 /* Pop-up sheets (dialogs) and small helpers. Each dialog returns a Promise: the answer, or null if cancelled. */
 (function () {
   'use strict';
+  const E = window.GasEngine;
   const $ = (s, el) => (el || document).querySelector(s);
   const $$ = (s, el) => Array.from((el || document).querySelectorAll(s));
   let closeCurrent = null;
   let toastTimer = 0;
+
+  // A stored pressure (inches WC) as the number to put in an input box in this unit.
+  function inputVal(vWc, unit, drop) {
+    if (vWc == null || !isFinite(vWc)) return '';
+    const dec = unit === 'psi' ? (drop ? 5 : 4) : (drop ? 4 : 3);
+    return String(parseFloat(E.toUnit(vWc, unit).toFixed(dec)));
+  }
 
   function esc(s) {
     return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -169,17 +177,26 @@
     });
   }
 
+  // Edit a pipe: its size (calculated, or one you pick), direction, feet, pressure drop; split or delete it.
+  // o.size = nominal size set by hand or null; o.autoLabel = the size the calculation picks;
+  // o.cfh / o.pIn / o.gas / o.high / o.minP preview the drop through a size you pick.
   function editPipeDialog(o) {
     const auto = o.drop == null;
+    let size = o.size == null ? null : Number(o.size);
     const html = head(`Pipe S${o.sec}`, 'Save') +
+      `<div class="fld"><span>Pipe size</span><div class="chips sizes">` +
+      `<button type="button" class="chip calc" data-size="">Calculated: ${esc(o.autoLabel || '—')}</button>` +
+      E.SIZES.map(s => `<button type="button" class="chip" data-size="${s.nom}">${s.label}</button>`).join('') +
+      `</div><p class="note" id="pSizeTxt"></p></div>` +
       `<div class="pipe-row"><div class="pad-wrap" id="pPad"><span class="cap">Which way</span>${dirPad(o.dir, o.back)}</div>` +
       `<div class="grow"><label class="fld"><span>Feet of pipe</span><input id="pFeet" class="big" inputmode="decimal" ` +
       `autocomplete="off" value="${o.feet}"></label></div></div>` +
-      `<div class="fld"><span>Pressure drop in this pipe</span><div class="seg">` +
+      `<div class="fld" id="pDropBox"><span>Pressure drop in this pipe</span><div class="seg">` +
       `<button type="button" data-mode="auto"${auto ? ' class="on"' : ''}>Auto</button>` +
       `<button type="button" data-mode="custom"${auto ? '' : ' class="on"'}>Custom</button></div>` +
-      `<div class="drop-row"><input id="pDrop" class="mid" inputmode="decimal" autocomplete="off" placeholder="in WC" ` +
-      `value="${auto ? '' : o.drop}"${auto ? ' hidden' : ''}><span id="pAutoTxt" class="note"></span></div></div>` +
+      `<div class="drop-row"><input id="pDrop" class="mid" inputmode="decimal" autocomplete="off" ` +
+      `placeholder="${E.unitName(o.unit)}" value="${auto ? '' : inputVal(o.drop, o.unit, true)}"${auto ? ' hidden' : ''}>` +
+      `<span id="pAutoTxt" class="note"></span></div></div>` +
       `<div class="facts">${o.facts}</div>` +
       `<div class="split"><span>Split at</span><input id="pSplit" class="sm" inputmode="decimal" placeholder="ft">` +
       `<span>ft from its start</span><button type="button" class="btn" id="doSplit">Split</button></div>` +
@@ -190,9 +207,11 @@
       let mode = auto ? 'auto' : 'custom';
       wirePad(el, '#pPad', d => { dir = d; });
       const feet = $('#pFeet', el), drop = $('#pDrop', el), autoTxt = $('#pAutoTxt', el);
+      const shownDrop = drop.value; // untouched box = keep the stored drop exactly
       const upd = () => {
         autoTxt.textContent = mode === 'auto'
-          ? `${fmt(num(feet) * o.rate, 3)}" WC — the allowable drop split by length` : 'inches WC for this pipe';
+          ? `${E.pressureText(num(feet) * o.rate, o.unit, { drop: true })} — the allowable drop split by length`
+          : `${E.unitName(o.unit)} for this pipe`;
       };
       $$('.seg button', el).forEach(b => {
         b.onclick = () => {
@@ -203,17 +222,33 @@
           upd();
         };
       });
-      feet.addEventListener('input', upd);
+      // A size you pick sets this pipe's drop; the pipes after it are re-sized with the pressure left over.
+      const sizeTxt = $('#pSizeTxt', el), dropBox = $('#pDropBox', el);
+      const updSize = () => {
+        $$('[data-size]', el).forEach(b => b.classList.toggle('on', (b.dataset.size ? Number(b.dataset.size) : null) === size));
+        dropBox.hidden = size != null;
+        if (size == null) { sizeTxt.textContent = 'Tap a size to run a different pipe than the calculation picked.'; return; }
+        const label = E.sizeByNom(size).label;
+        const pOut = E.pressureAfter(o.cfh, num(feet), size, o.pIn, o.gas, o.high);
+        sizeTxt.textContent = pOut == null ? `${label} can't carry ${Math.round(o.cfh)} CFH this far.`
+          : `${label} drops ${E.pressureText(o.pIn - pOut, o.unit, { drop: true })}, leaving ${E.pressureText(pOut, o.unit)}` +
+            (pOut < o.minP - 1e-6 ? ' — below the minimum!' : '. The pipes after it get re-sized with what is left.');
+      };
+      $$('[data-size]', el).forEach(b => {
+        b.onclick = () => { size = b.dataset.size ? Number(b.dataset.size) : null; updSize(); };
+      });
+      feet.addEventListener('input', () => { upd(); updSize(); });
       upd();
+      updSize();
       const submit = () => {
         const f = num(feet);
         if (!(f > 0)) return showErr(el, 'Enter the feet of pipe.');
         let d = null;
-        if (mode === 'custom') {
-          d = num(drop);
-          if (!(d > 0)) return showErr(el, 'Enter the pressure drop in inches WC, or pick Auto.');
+        if (mode === 'custom' && size == null) {
+          d = drop.value === shownDrop && o.drop != null ? o.drop : E.fromUnit(num(drop), o.unit);
+          if (!(d > 0)) return showErr(el, `Enter the pressure drop in ${E.unitName(o.unit)}, or pick Auto.`);
         }
-        return close({ action: 'save', dir, feet: f, drop: d });
+        return close({ action: 'save', dir, feet: f, drop: d, size });
       };
       $('#ok', el).onclick = submit;
       onEnter(el, submit);
@@ -253,16 +288,21 @@
     });
   }
 
-  // New job / job settings: regulator pressure, allowable drop, gas.
+  // New job / job settings: pressure unit, regulator pressure, allowable drop, gas.
+  // Pressures go in and out in inches WC; the boxes show them in the chosen unit.
   function jobDialog(o) {
+    let unit = o.unit === 'psi' ? 'psi' : 'wc';
+    const val = { start: o.startP, allow: o.allowDrop }; // inches WC; changed only when a box is edited
     const gasBtn = (g, label) => `<button type="button" data-gas="${g}"${o.gas === g ? ' class="on"' : ''}>${label}</button>`;
+    const unitBtn = (u, label) => `<button type="button" data-u="${u}"${unit === u ? ' class="on"' : ''}>${label}</button>`;
     const html = head(o.title, o.okText) + (o.sub ? `<p class="sub">${esc(o.sub)}</p>` : '') +
       `<label class="fld"><span>Job name</span><input id="jName" class="mid" value="${esc(o.name || '')}" ` +
       `autocomplete="off" autocapitalize="words" placeholder="e.g. Marshal CCRD"></label>` +
-      `<div class="grid2"><label class="fld"><span>Pressure at the main regulator (in WC)</span>` +
-      `<input id="jStart" class="big" inputmode="decimal" autocomplete="off" value="${o.startP}"></label>` +
-      `<label class="fld"><span>Total allowable pressure drop (in WC)</span>` +
-      `<input id="jAllow" class="big" inputmode="decimal" autocomplete="off" value="${o.allowDrop}"></label></div>` +
+      `<div class="fld"><span>Pressures in</span><div class="seg">${unitBtn('wc', 'inches WC')}${unitBtn('psi', 'psi')}</div></div>` +
+      `<div class="grid2"><label class="fld"><span id="jStartLbl"></span>` +
+      `<input id="jStart" class="big" inputmode="decimal" autocomplete="off"></label>` +
+      `<label class="fld"><span id="jAllowLbl"></span>` +
+      `<input id="jAllow" class="big" inputmode="decimal" autocomplete="off"></label></div>` +
       `<p class="note" id="jMin"></p><div class="fld"><span>Gas</span><div class="seg">` +
       gasBtn('NG', 'Natural gas') + gasBtn('LP', 'Propane (LP)') + `</div></div>` +
       `<details class="more"${o.btuPerCf ? ' open' : ''}><summary>Heating value</summary><label class="fld">` +
@@ -272,21 +312,36 @@
       let gas = o.gas;
       const start = $('#jStart', el), allow = $('#jAllow', el), minTxt = $('#jMin', el);
       const upd = () => {
-        const s = num(start), a = num(allow);
-        minTxt.textContent = s > 0 && a > 0 ? `Lowest allowed at a heater: ${fmt(s - a, 2)}" WC` +
-          (s >= 41.5 ? '  ·  1.5 psi or more: the low-pressure formula does not apply' : '') : '';
+        const s = val.start, a = val.allow;
+        minTxt.textContent = s > 0 && a > 0 ? `Lowest allowed at a heater: ${E.pressureText(s - a, unit)}` +
+          (s >= E.HIGH_PRESSURE ? '  ·  1.5 psi or more: sized with the high-pressure formula (IFGC Eq. 4-2)' : '') : '';
       };
-      start.addEventListener('input', upd);
-      allow.addEventListener('input', upd);
-      upd();
+      const show = () => {
+        $('#jStartLbl', el).textContent = `Pressure at the main regulator (${E.unitName(unit)})`;
+        $('#jAllowLbl', el).textContent = `Total allowable pressure drop (${E.unitName(unit)})`;
+        start.value = inputVal(val.start, unit);
+        allow.value = inputVal(val.allow, unit, true);
+        upd();
+      };
+      const read = (input, key) => {
+        const v = num(input);
+        val[key] = v > 0 ? E.fromUnit(v, unit) : NaN;
+        upd();
+      };
+      start.addEventListener('input', () => read(start, 'start'));
+      allow.addEventListener('input', () => read(allow, 'allow'));
+      $$('[data-u]', el).forEach(b => {
+        b.onclick = () => { unit = b.dataset.u; $$('[data-u]', el).forEach(x => x.classList.toggle('on', x === b)); show(); };
+      });
+      show();
       $$('[data-gas]', el).forEach(b => {
         b.onclick = () => { gas = b.dataset.gas; $$('[data-gas]', el).forEach(x => x.classList.toggle('on', x === b)); };
       });
       const submit = () => {
-        const s = num(start), a = num(allow), btu = num($('#jBtu', el));
-        if (!(s > 0)) return showErr(el, 'Enter the pressure at the main regulator (inches WC).');
+        const s = val.start, a = val.allow, btu = num($('#jBtu', el));
+        if (!(s > 0)) return showErr(el, `Enter the pressure at the main regulator (${E.unitName(unit)}).`);
         if (!(a > 0 && a < s)) return showErr(el, 'The allowable drop must be more than 0 and less than the regulator pressure.');
-        return close({ name: $('#jName', el).value.trim() || 'New job', startP: s, allowDrop: a, gas,
+        return close({ name: $('#jName', el).value.trim() || 'New job', startP: s, allowDrop: a, gas, unit,
           btuPerCf: btu > 0 ? btu : null });
       };
       $('#ok', el).onclick = submit;
