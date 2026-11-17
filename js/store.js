@@ -3,6 +3,7 @@
   'use strict';
   const KEY = 'gaspipe.jobs.v1';
   const CUR = 'gaspipe.current.v1';
+  const UNIT = 'gaspipe.unit.v1'; // pressure unit used last ('wc' or 'psi'), the default for new jobs
   const DIRS = ['E', 'S', 'W', 'N'];
 
   function uid(prefix) {
@@ -18,7 +19,7 @@
     return {
       v: 1, id: uid('j'), name: o.name || 'New job', created: Date.now(), updated: Date.now(),
       gas: o.gas === 'LP' ? 'LP' : 'NG', startP: num(o.startP, 13), allowDrop: num(o.allowDrop, 7),
-      btuPerCf: null,
+      btuPerCf: null, unit: o.unit === 'psi' ? 'psi' : 'wc', // pressures are stored in inches WC either way
       nodes: [{ id: 'n0', parent: null, dir: null, feet: 0, drop: null, heater: null }],
       seq: 1,
       last: { mbh: 135, name: '', dropFt: 0, dropDir: null, pipeDir: 'E', pipeHeater: false },
@@ -47,6 +48,12 @@
   function setCurrentId(id) {
     try { localStorage.setItem(CUR, id); } catch (e) { /* private browsing: nothing to keep */ }
   }
+  function lastUnit() {
+    try { return localStorage.getItem(UNIT) === 'psi' ? 'psi' : 'wc'; } catch (e) { return 'wc'; }
+  }
+  function setLastUnit(unit) {
+    try { localStorage.setItem(UNIT, unit); } catch (e) { /* private browsing */ }
+  }
 
   // A job is a tree: nodes[0] is the regulator, every other node names its parent.
   function isValid(j) {
@@ -71,6 +78,7 @@
     const job = Object.assign({}, d, j);
     job.last = Object.assign({}, d.last, j.last || {});
     job.gas = job.gas === 'LP' ? 'LP' : 'NG';
+    job.unit = job.unit === 'psi' ? 'psi' : 'wc';
     job.startP = num(job.startP, 13);
     job.allowDrop = num(job.allowDrop, 7);
     let maxSeq = 0;
@@ -79,6 +87,7 @@
       if (m) maxSeq = Math.max(maxSeq, parseInt(m[1], 10));
       n.feet = num(n.feet, 0);
       n.drop = n.drop == null || n.drop === '' ? null : num(n.drop, null);
+      n.size = n.size == null || n.size === '' ? null : num(n.size, null); // pipe size set by hand (nominal in)
       if (n.heater) n.heater = { name: String(n.heater.name || ''), mbh: num(n.heater.mbh, 0) };
       else n.heater = null;
     }
@@ -132,5 +141,6 @@
     return job;
   }
 
-  window.GasStore = { newJob, loadAll, saveAll, currentId, setCurrentId, isValid, normalize, History, example, uid };
+  window.GasStore = { newJob, loadAll, saveAll, currentId, setCurrentId, lastUnit, setLastUnit, isValid, normalize,
+    History, example, uid };
 })();
