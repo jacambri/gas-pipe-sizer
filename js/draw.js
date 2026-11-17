@@ -2,6 +2,7 @@
    One finger drags, two fingers pinch-zoom, a tap selects a point, a pipe or a heater. */
 (function () {
   'use strict';
+  const E = window.GasEngine;
   const C = { pipe: '#1f3864', low: '#c62828', empty: '#9aa3ad', sel: '#ff8f00', heat: '#e65100', grid: '#edf1f6' };
   const GRID_STEPS = [5, 10, 25, 50, 100, 250, 500, 1000];
   const SCALE_STEPS = [5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000];
@@ -154,7 +155,7 @@
       if (id === r.rootId) {
         const first = a.kids.length ? byId[a.kids[0]].dir : 'E';
         const an = first !== 'W' ? 'end' : 'start', lx = an === 'end' ? x - 20 : x + 20;
-        const press = `${job.startP}" WC`;
+        const press = E.pressureText(job.startP, job.unit);
         out.push(`<circle cx="${x}" cy="${y}" r="13" fill="#fff" stroke="${C.pipe}" stroke-width="3"/>` +
           `<text class="reg" x="${x}" y="${y + 5}" text-anchor="middle">R</text>` +
           `<text class="hl" x="${lx}" y="${y - 2}" text-anchor="${an}">Regulator</text>` +
@@ -189,7 +190,7 @@
       heaterLabels.push({ ht, x, y, tap, sel: isSel, dir: byId[ht.id].dir || 'E' });
     }
 
-    placeLabels(out, taken, pipeLabels, heaterLabels, live);
+    placeLabels(out, taken, pipeLabels, heaterLabels, live, job.unit);
 
     if (sel.k === 'node' && r.at[sel.id]) {
       const a = r.at[sel.id];
@@ -216,12 +217,12 @@
       : [[c.mx + c.sw / 2 + 7, c.my + 4, 'start'], [c.mx - c.sw / 2 - 7, c.my + 4, 'end']];
   }
   function pipeParts(p, full) {
-    const size = [p.size ? p.size.label : '—', 13, true, 'sz'];
+    const size = [p.size ? p.size.label : '—', 13, true, p.set ? 'sz set' : 'sz'];
     return full ? [[`S${p.sec} `, 11, false, 'sec'], [`${ft(p.feet)}' `, 13, false, ''], size] : [size];
   }
   function partsWidth(parts) { return parts.reduce((s, q) => s + textWidth(q[0], q[1], q[2]), 0); }
 
-  function placeLabels(out, taken, pipes, heaters, live) {
+  function placeLabels(out, taken, pipes, heaters, live, unit) {
     const place = (spots, w, px, force) => {
       for (const [x, y, an] of spots) {
         const b = textBox(x, y, w, px, an);
@@ -262,7 +263,7 @@
     for (const h of heaters) {
       if (!h.side) continue;
       const ht = h.ht;
-      h.info = `${ft(ht.mbh)} MBH · ${ht.pressure == null ? '—' : ht.pressure.toFixed(2) + '"'}${ht.ok ? '' : ' ⚠'}`;
+      h.info = `${ft(ht.mbh)} MBH · ${E.pressureText(ht.pressure, unit, { suffix: 'short' })}${ht.ok ? '' : ' ⚠'}`;
       const [x, y, an] = heaterSpots(h, h.side)[1];
       const b = textBox(x, y, textWidth(h.info, 12, false), 12, an);
       taken.drop(h.nameBox); // the second line may touch its own name line
