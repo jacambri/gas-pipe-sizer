@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Gas Pipe Sizer</title>
+<meta name="description" content="Draw a gas piping layout from the regulator out and size every pipe. Works offline.">
+<meta name="theme-color" content="#1f3864">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Gas Pipe">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <button type="button" id="btnJobs" class="tb-btn">&#9776; Jobs</button>
+    <button type="button" id="jobTitle" class="job-title">New job</button>
+    <button type="button" id="btnSettings" class="tb-chip"></button>
+  </header>
+  <main id="stage">
+    <svg id="canvas" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Gas piping drawing"></svg>
+    <div id="floatBtns">
+      <button type="button" id="btnFit" class="float-btn">Fit</button>
+      <button type="button" id="btnList" class="float-btn">List</button>
+    </div>
+  </main>
+  <section id="listView" hidden></section>
+  <footer id="bottom">
+    <div id="selInfo" class="sel-info"></div>
+    <div class="actions">
+      <button type="button" id="btnPipe" class="act primary">+ Pipe</button>
+      <button type="button" id="btnHeater" class="act primary">+ Heater</button>
+      <button type="button" id="btnEdit" class="act">Edit</button>
+      <button type="button" id="btnDelete" class="act danger">Delete</button>
+      <span class="spacer"></span>
+      <button type="button" id="btnUndo" class="act icon" aria-label="Undo">&#8630;</button>
+      <button type="button" id="btnRedo" class="act icon" aria-label="Redo">&#8631;</button>
+    </div>
+    <div id="status" class="status"></div>
+  </footer>
+</div>
+<div id="sheetBackdrop" hidden></div>
+<div id="sheet" role="dialog" aria-modal="true" hidden></div>
+<div id="toast" role="status" hidden></div>
+<div id="printView"></div>
+<script src="js/engine.js"></script>
+<script src="js/store.js"></script>
+<script src="js/draw.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/list.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
