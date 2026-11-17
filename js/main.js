@@ -41,6 +41,7 @@
       $('#btnFit').onclick = () => this.drawing.fit();
       $('#btnList').onclick = () => this.toggleList(true);
       $('#status').onclick = () => this.toggleList(true);
+      document.querySelectorAll('#unitSeg [data-unit]').forEach(b => { b.onclick = () => this.setUnit(b.dataset.unit); });
       document.addEventListener('keydown', e => {
         if (U.isOpen() || !(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z') return;
         e.preventDefault();
@@ -49,6 +50,15 @@
     },
 
     // ---------- state ----------
+    P(vWc, opt) { return E.pressureText(vWc, this.job.unit, opt); }, // a pressure in this job's unit
+    setUnit(unit) {
+      if ((this.job.unit || 'wc') === unit) return;
+      this.job.unit = unit;
+      S.setLastUnit(unit);
+      this.save();
+      this.refresh();
+      U.toast(unit === 'psi' ? 'Pressures now in psi' : 'Pressures now in inches WC');
+    },
     node(id) { return this.job.nodes.find(n => n.id === id); },
     anchor() { return this.sel.id; }, // the point new pipes and heaters attach to
     open(id) {
@@ -69,12 +79,24 @@
       if (!S.saveAll(this.jobs)) U.toast('Could not save on this device (storage full or private browsing).');
     },
     commit(change, sel) {
+      const lowBefore = this.r ? this.r.totals.lowHeaters : 0;
       this.hist.record(JSON.stringify(this.job));
       change(this.job);
       this.job.updated = Date.now();
       if (sel) this.sel = sel;
       this.save();
       this.refresh();
+      if (this.r.totals.lowHeaters > lowBefore) this.lowPressureAlert();
+    },
+    // Pops up when a change leaves more heaters below the minimum pressure than before.
+    async lowPressureAlert() {
+      const low = this.r.heaters.filter(h => !h.ok);
+      const names = low.slice(0, 6).map(h => `${h.name || 'Heater'} ${this.P(h.pressure, { suffix: 'short' })}`).join(', ') +
+        (low.length > 6 ? `, and ${low.length - 6} more` : '');
+      const answer = await U.choose('⚠ Gas pressure too low at the heaters',
+        `${low.length} heater${low.length === 1 ? ' is' : 's are'} below the ${this.P(this.r.minP)} minimum: ${names}.`,
+        [{ label: 'Undo that change', value: 'undo', cls: 'danger' }, { label: 'Keep it for now', value: 'keep' }]);
+      if (answer === 'undo') this.undo();
     },
     undo() { this.travel(this.hist.undo(JSON.stringify(this.job)), 'Undone'); },
     redo() { this.travel(this.hist.redo(JSON.stringify(this.job)), 'Redone'); },
@@ -104,8 +126,9 @@
       this.r = E.compute(this.job);
       const j = this.job;
       $('#jobTitle').textContent = j.name || 'Untitled job';
-      $('#btnSettings').textContent = `${fmt(j.startP, 1)}" WC · ${fmt(j.allowDrop, 1)}" drop · ` +
+      $('#btnSettings').textContent = `${this.P(j.startP)} · ${this.P(j.allowDrop, { suffix: 'short' })} drop · ` +
         (j.gas === 'LP' ? 'Propane' : 'Nat. gas');
+      document.querySelectorAll('#unitSeg [data-unit]').forEach(b => b.classList.toggle('on', b.dataset.unit === (j.unit || 'wc')));
       this.drawing.setData(j, this.r, this.sel);
       this.renderSel();
       this.renderStatus();
@@ -120,17 +143,20 @@
       if (s.k === 'heater') {
         const h = r.heaters.find(x => x.id === s.id);
         html = `<b>${esc(h.name || 'Heater')}</b> · ${fmt(h.mbh, h.mbh % 1 ? 1 : 0)} MBH = ${fmt(h.cfh, 1)} CFH · ` +
-          `${fmt(h.pressure, 2)}" WC ` + (h.ok ? '<span class="ok">✓ OK</span>'
-            : `<span class="bad">⚠ below ${fmt(r.minP, 2)}"</span>`);
+          `${this.P(h.pressure)} ` + (h.ok ? '<span class="ok">✓ OK</span>'
+            : `<span class="bad">⚠ too low (min ${this.P(r.minP, { suffix: 'short' })})</span>`);
       } else if (isRoot) {
-        html = `<b>Regulator</b> · ${fmt(this.job.startP, 1)}" WC · feeds ${whole(r.totals.cfh)} CFH` +
+        html = `<b>Regulator</b> · ${this.P(this.job.startP)} · feeds ${whole(r.totals.cfh)} CFH` +
+          (r.formula === 'high' ? ' · sized with the 1.5 psi+ formula' : '') +
           (r.pipes.length ? '' : ' · tap <b>+ Pipe</b> for the feet to the first heater or branch');
       } else {
         const p = r.pipeOf[a];
+        const size = !p.size ? 'no size'
+          : p.set ? `${esc(p.size.label)} set by you (calc ${p.autoSize ? esc(p.autoSize.label) : '—'})` : esc(p.size.label);
         html = (s.k === 'pipe' ? `<b>S${p.sec}</b> · ${fmt(p.feet, p.feet % 1 ? 1 : 0)} ft · ${whole(p.cfh)} CFH · ` +
-          `drop ${fmt(p.drop, 3)}"${p.custom ? '' : ' auto'} · <b>${p.size ? esc(p.size.label) : 'no size'}</b>`
+          `drop ${this.P(p.drop, { drop: true, suffix: 'short' })}${p.set || p.custom ? '' : ' auto'} · <b>${size}</b>`
           : `<b>End of S${p.sec}</b> · ${whole(r.at[a].run)} ft from the regulator`) +
-          ` · ${fmt(p.pOut, 2)}" WC here`;
+          ` · ${this.P(p.pOut)} here`;
       }
       $('#selInfo').innerHTML = html;
       $('#btnHeater').disabled = isRoot;
@@ -143,13 +169,13 @@
     renderStatus() {
       const r = this.r, t = r.totals;
       const bits = [`${whole(t.cfh)} CFH`, `${t.heaters} heater${t.heaters === 1 ? '' : 's'}`];
-      if (t.lowest) bits.push(`lowest ${fmt(t.lowest.pressure, 2)}" at ${esc(t.lowest.name || 'a heater')}`);
+      if (t.lowest) bits.push(`lowest ${this.P(t.lowest.pressure, { suffix: 'short' })} at ${esc(t.lowest.name || 'a heater')}`);
       let cls = 'ok', msg = '✓ All OK';
       if (r.warnings.length) { cls = 'bad'; msg = '⚠ ' + esc(r.warnings[0]); }
       else if (t.lowHeaters || t.lowPipes) {
         cls = 'bad';
-        msg = t.lowHeaters ? `⚠ ${t.lowHeaters} heater${t.lowHeaters === 1 ? '' : 's'} below ${fmt(r.minP, 2)}" WC`
-          : `⚠ pressure below ${fmt(r.minP, 2)}" WC`;
+        msg = t.lowHeaters ? `⚠ Gas pressure too low at ${t.lowHeaters} heater${t.lowHeaters === 1 ? '' : 's'} ` +
+          `(min ${this.P(r.minP, { suffix: 'short' })})` : `⚠ Pressure runs out (min ${this.P(r.minP, { suffix: 'short' })})`;
       } else if (t.emptyPipes) {
         cls = 'warn';
         msg = `⚠ ${t.emptyPipes} pipe${t.emptyPipes === 1 ? '' : 's'} with nothing past ${t.emptyPipes === 1 ? 'it' : 'them'}`;
@@ -236,26 +262,30 @@
     },
 
     async editPipe(id) {
-      const n = this.node(id), p = this.r.pipeOf[id], parent = this.node(n.parent);
-      const facts = `<b>${whole(p.cfh)} CFH</b> flows through this pipe` +
-        (p.size ? ` · needs ${fmt(p.d, 3)}" inside → <b>${esc(p.size.label)}</b>` : ' · nothing is connected past it') +
-        `<br>Pressure ${fmt(p.pIn, 2)}" → ${fmt(p.pOut, 2)}" WC · ${whole(this.r.at[id].run)} ft from the regulator` +
+      const n = this.node(id), p = this.r.pipeOf[id], parent = this.node(n.parent), r = this.r;
+      const calc = p.set ? p.autoSize : p.size; // the size the calculation picks here
+      const facts = `<b>${whole(p.cfh)} CFH</b> flows through this pipe` + (p.cfh > 0 && p.d != null
+        ? ` · the calculation needs ${fmt(p.d, 3)}" inside → <b>${calc ? esc(calc.label) : '—'}</b>` : '') +
+        (p.cfh > 0 ? '' : ' · nothing is connected past it') +
+        `<br>Pressure ${this.P(p.pIn, { suffix: 'short' })} → ${this.P(p.pOut)} · ${whole(r.at[id].run)} ft from the regulator` +
         (p.status === 'bigger' ? `<br>Note: bigger than S${p.parentSec}, the pipe feeding it.` : '');
       const res = await U.editPipeDialog({ sec: p.sec, dir: n.dir, back: parent.dir ? E.OPPOSITE[parent.dir] : null,
-        feet: n.feet, drop: n.drop, rate: this.r.rate, facts });
+        feet: n.feet, drop: n.drop, size: n.size, autoLabel: calc ? calc.label : '—',
+        rate: Math.max(r.rateAt[n.parent] || 0, 0), unit: this.job.unit, cfh: p.cfh, pIn: p.pIn, gas: r.gas,
+        high: r.formula === 'high', minP: r.minP, facts });
       if (!res) return;
       if (res.action === 'delete') return this.removePipe(id);
       if (res.action === 'split') return this.split(id, res.at);
       this.commit(j => {
         const m = j.nodes.find(x => x.id === id);
-        Object.assign(m, { dir: res.dir, feet: res.feet, drop: res.drop });
+        Object.assign(m, { dir: res.dir, feet: res.feet, drop: res.size != null ? null : res.drop, size: res.size });
       }, { k: 'pipe', id });
     },
 
     async editHeater(id) {
       const n = this.node(id), h = this.r.heaters.find(x => x.id === id);
-      const facts = `${fmt(h.cfh, 1)} CFH · ${fmt(h.pressure, 2)}" WC at this heater · ` +
-        (h.ok ? 'OK' : `below the ${fmt(this.r.minP, 2)}" minimum`);
+      const facts = `${fmt(h.cfh, 1)} CFH · ${this.P(h.pressure)} at this heater · ` +
+        (h.ok ? 'OK' : `gas pressure too low (minimum ${this.P(this.r.minP)})`);
       const res = await U.editHeaterDialog({ name: n.heater.name, mbh: n.heater.mbh, btu: E.btuPerCfOf(this.job), facts });
       if (!res) return;
       if (res.action === 'delete') return this.removeHeater(id);
@@ -311,7 +341,7 @@
         j.seq += 1;
         const i = j.nodes.findIndex(n => n.id === id), n = j.nodes[i], part = at / n.feet;
         j.nodes.splice(i, 0, { id: mid, parent: n.parent, dir: n.dir, feet: at,
-          drop: n.drop != null ? n.drop * part : null, heater: null });
+          drop: n.drop != null ? n.drop * part : null, size: n.size != null ? n.size : null, heater: null });
         n.parent = mid;
         n.feet = Math.round((n.feet - at) * 10000) / 10000;
         if (n.drop != null) n.drop *= 1 - part;
@@ -323,16 +353,20 @@
     async settings() {
       const j = this.job;
       const res = await U.jobDialog({ title: 'Job', okText: 'Save', name: j.name, startP: j.startP,
-        allowDrop: j.allowDrop, gas: j.gas, btuPerCf: j.btuPerCf });
-      if (res) this.commit(x => Object.assign(x, res));
+        allowDrop: j.allowDrop, gas: j.gas, btuPerCf: j.btuPerCf, unit: j.unit });
+      if (!res) return;
+      S.setLastUnit(res.unit);
+      this.commit(x => Object.assign(x, res));
     },
 
     async newJob() {
       const prev = this.jobs.find(j => j.id === this.job.id) ? this.job : null;
       const res = await U.jobDialog({ title: 'New job', okText: 'Start',
         sub: 'Start at the main regulator. Next you draw the feet to the first heater or branch.',
-        name: '', startP: prev ? prev.startP : 13, allowDrop: prev ? prev.allowDrop : 7, gas: prev ? prev.gas : 'NG' });
+        name: '', startP: prev ? prev.startP : 13, allowDrop: prev ? prev.allowDrop : 7, gas: prev ? prev.gas : 'NG',
+        unit: prev ? prev.unit : S.lastUnit() });
       if (!res) return false;
+      S.setLastUnit(res.unit);
       const job = S.newJob(res);
       job.btuPerCf = res.btuPerCf;
       if (prev) Object.assign(job.last, { mbh: prev.last.mbh, dropFt: prev.last.dropFt, dropDir: prev.last.dropDir });
@@ -437,6 +471,12 @@
 
     registerSW() {
       if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
+      // When a newer version of the app takes over (after an update), reload once so it shows right away.
+      let had = !!navigator.serviceWorker.controller;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!had) { had = true; return; }
+        if (!U.isOpen()) location.reload();
+      });
       navigator.serviceWorker.register('sw.js').catch(() => { /* offline install not available here */ });
     },
   };
