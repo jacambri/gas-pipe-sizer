@@ -403,6 +403,7 @@
       else if (res.action === 'import') this.importText(res.text);
       else if (res.action === 'export') this.exportJob();
       else if (res.action === 'print') L.print(this.job, this.r, this.drawing);
+      else if (res.action === 'math') window.GasMath.print(this.job, this.r);
       else if (res.action === 'dup') this.duplicate();
       else if (res.action === 'delete') this.deleteJob();
     },
