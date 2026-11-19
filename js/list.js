@@ -45,12 +45,12 @@
     const sizeRows = r.totals.bySize.filter(s => s.count).map(s =>
       `<tr><td class="size">${esc(s.label)}</td><td>${whole(s.feet)}</td><td>${s.count}</td></tr>`).join('');
     return `<h3>Pipes</h3><div class="tbl"><table><thead><tr><th>Section</th><th>Feet</th><th>CFH</th>` +
-      `<th>Drop (${un})</th><th>Req'd ID (in)</th><th>Size</th><th>Pressure at end (${un})</th><th>Check</th></tr></thead>` +
+      `<th>Drop (${un})</th><th>Req'd ID (in)</th><th>Size</th><th>Pressure at end (${un})</th><th class="chk">Check</th></tr></thead>` +
       `<tbody>${pipeRows || '<tr><td colspan="8">No pipes yet.</td></tr>'}</tbody></table></div>` +
       `<p class="note">Gray drops are automatic: the allowable drop split by length along the longest run, or what is ` +
       `left after a pipe whose size you set. Purple sizes are ones you set; "calc" is what the calculation picked.</p>` +
       `<h3>Heaters</h3><div class="tbl"><table><thead><tr><th>Heater</th><th>MBH</th><th>CFH</th>` +
-      `<th>Pressure (${un})</th><th>Check</th></tr></thead>` +
+      `<th>Pressure (${un})</th><th class="chk">Check</th></tr></thead>` +
       `<tbody>${heaterRows || '<tr><td colspan="5">No heaters yet.</td></tr>'}</tbody></table></div>` +
       `<h3>Pipe by size</h3><div class="tbl narrow"><table><thead><tr><th>Size</th><th>Feet</th><th>Pipes</th></tr></thead>` +
       `<tbody>${sizeRows || '<tr><td colspan="3">—</td></tr>'}</tbody></table></div>`;
@@ -66,6 +66,23 @@
       `inside diameter.</p>`;
   }
 
+  // The box at the top of the printout: supply, load and the result. Heaters on more than 14" WC need a regulator.
+  function notes(job, r) {
+    const t = r.totals, P = v => E.pressureText(v, job.unit);
+    const mbh = Array.from(new Set(r.heaters.map(h => h.mbh)));
+    const load = mbh.length === 1
+      ? `${t.heaters} heater${t.heaters === 1 ? '' : 's'} × ${whole(mbh[0])} MBH = ${whole(t.cfh)} CFH`
+      : `${t.heaters} heaters, ${whole(t.mbh)} MBH in all = ${whole(t.cfh)} CFH`;
+    const low = r.heaters.filter(h => !h.ok);
+    const reg = job.startP > 14 + 1e-9 ? ' Each heater will need an ARS supplied regulator.' : '';
+    const result = !t.heaters ? 'No heaters yet.' : low.length
+      ? `Gas pressure is too low at ${low.length} heater${low.length === 1 ? '' : 's'}: ${low.map(h => esc(h.name)).join(', ')}.${reg}`
+      : `All heaters have adequate gas pressure.${reg}`;
+    return `<div class="basis"><ul><li><b>Supply:</b> ${esc(r.gas.name)}, ${P(job.startP)} at the regulator, ` +
+      `${P(job.allowDrop)} allowable drop (${P(r.minP)} minimum at each heater).</li><li><b>Load:</b> ${load}.</li>` +
+      `<li><b>Results:</b> ${result}</li></ul></div>`;
+  }
+
   function render(el, job, r, onPick, onBack) {
     const warn = r.warnings.map(w => `<p class="warn-line">⚠ ${esc(w)}</p>`).join('');
     el.innerHTML = `<button type="button" class="btn back" id="backDraw">← Back to the drawing</button>` +
@@ -78,10 +95,10 @@
   function print(job, r, drawing) {
     const el = document.getElementById('printView');
     el.innerHTML = `<h1>${esc(job.name)}</h1><p class="note">Gas pipe sizing · ${esc(r.gas.name)} · ` +
-      `printed ${new Date().toLocaleDateString()}</p>` + drawing.staticSvg(1000, 600) + summary(job, r) +
+      `printed ${new Date().toLocaleDateString()}</p>` + notes(job, r) + drawing.printSvg() + summary(job, r) +
       tables(job, r, false) + method(r);
     setTimeout(() => window.print(), 60);
   }
 
-  window.GasList = { render, print, checkText };
+  window.GasList = { render, print, checkText, notes };
 })();
