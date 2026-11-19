@@ -358,6 +358,7 @@
       (o.currentId ? `<p class="cap">This job</p><div class="btn-row">` +
         `<button type="button" class="btn" data-act="export">Save as file</button>` +
         `<button type="button" class="btn" data-act="print">Print / PDF</button>` +
+        `<button type="button" class="btn" data-act="math">Print the math</button>` +
         `<button type="button" class="btn" data-act="dup">Duplicate</button>` +
         `<button type="button" class="btn danger" data-act="delete">Delete job</button></div>` : '') +
       `<div class="btn-row"><label class="btn file">Open a job file<input type="file" id="imp" ` +
