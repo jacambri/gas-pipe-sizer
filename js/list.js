@@ -17,7 +17,7 @@
     const t = r.totals, u = job.unit;
     const cards = [
       ['Regulator', E.pressureText(job.startP, u)],
-      ['Allowable drop', E.pressureText(job.allowDrop, u, { drop: true })],
+      ['Allowable drop', E.pressureText(job.allowDrop, u)],
       ['Lowest allowed', E.pressureText(r.minP, u)],
       ['Total load', `${whole(t.cfh)} CFH`],
       ['Heaters', `${t.heaters} · ${whole(t.mbh)} MBH`],
