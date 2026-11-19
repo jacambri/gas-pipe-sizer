@@ -52,8 +52,8 @@
       `<h3>Heaters</h3><div class="tbl"><table><thead><tr><th>Heater</th><th>MBH</th><th>CFH</th>` +
       `<th>Pressure (${un})</th><th class="chk">Check</th></tr></thead>` +
       `<tbody>${heaterRows || '<tr><td colspan="5">No heaters yet.</td></tr>'}</tbody></table></div>` +
-      `<h3>Pipe by size</h3><div class="tbl narrow"><table><thead><tr><th>Size</th><th>Feet</th><th>Pipes</th></tr></thead>` +
-      `<tbody>${sizeRows || '<tr><td colspan="3">—</td></tr>'}</tbody></table></div>`;
+      (live ? `<h3>Pipe by size</h3><div class="tbl narrow"><table><thead><tr><th>Size</th><th>Feet</th><th>Pipes</th></tr></thead>` +
+        `<tbody>${sizeRows || '<tr><td colspan="3">—</td></tr>'}</tbody></table></div>` : ''); // on screen only, not printed
   }
 
   function method(r) {
