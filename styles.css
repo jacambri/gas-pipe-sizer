@@ -72,7 +72,7 @@ td.size { font-weight: 800; color: var(--navy); }
 td.size.set { color: var(--set); }
 td.size small { font-weight: 400; }
 td.auto { color: #8a94a3; font-style: italic; }
-td.chk { text-align: left; }
+td.chk, th.chk { text-align: left; }
 tr[data-id], tr[data-h] { cursor: pointer; }
 tr.st-ok td.chk { color: var(--ok); font-weight: 600; }
 tr.st-low td, tr.st-low td.size { color: var(--bad); }
@@ -181,9 +181,20 @@ details.more summary { cursor: pointer; font-size: 14px; }
 
 /* printing */
 #printView { display: none; }
+.basis { margin: 8px 0; padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: #f8fafc; font-size: 12px; }
+.basis ul { margin: 0; padding-left: 18px; }
+.basis li { margin: 2px 0; }
+.mathdoc h2 { margin: 18px 0 6px; color: var(--navy); font-size: 17px; }
+.mathdoc p, .mathdoc li { font-size: 13px; line-height: 1.45; }
+.formula { margin: 8px 0; padding: 8px 12px; border-left: 4px solid var(--navy); background: #f4f7fb; font-size: 15px; }
+.ex { margin: 10px 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; break-inside: avoid; }
+.ex h4 { margin: 0 0 4px; color: var(--navy); }
+.ex ol { margin: 0; padding-left: 20px; }
 @media print {
   @page { size: landscape; margin: 10mm; }
-  body { position: static; overflow: visible; background: #fff; }
+  html, body { position: static; overflow: visible; background: #fff; }
+  .cards, .card, .print-svg, .tbl.keep { break-inside: avoid; }
+  h3 { break-after: avoid; }
   #app, #sheet, #sheetBackdrop, #toast { display: none !important; }
   #printView { display: block; }
   #printView h1 { margin: 0 0 2px; color: var(--navy); }
