@@ -1,5 +1,5 @@
 /* Offline support: keep every app file on the device and serve it from there, even with no internet. */
-const VERSION = '828324c3e0'; // replaced with a hash of the app files when it is published
+const VERSION = '4c2433f3be'; // replaced with a hash of the app files when it is published
 const CACHE = 'gas-pipe-' + VERSION;
 const FILES = ['./', './index.html', './styles.css', './manifest.webmanifest', './js/engine.js', './js/store.js',
   './js/draw.js', './js/ui.js', './js/list.js', './js/main.js', './icons/icon-180.png', './icons/icon-192.png',
