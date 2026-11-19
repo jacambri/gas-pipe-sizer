@@ -73,18 +73,23 @@
     return { w: Math.round(b.width), h: Math.round(b.height) };
   };
 
-  Drawing.prototype.fitView = function (w, h) {
-    const r = this.r;
+  Drawing.prototype.box = function () { // extent of the layout in feet
     let x0 = 0, y0 = 0, x1 = 0, y1 = 0;
-    for (const id of r.order) {
-      const a = r.at[id];
+    for (const id of this.r.order) {
+      const a = this.r.at[id];
       x0 = Math.min(x0, a.x); y0 = Math.min(y0, a.y); x1 = Math.max(x1, a.x); y1 = Math.max(y1, a.y);
     }
-    const mx = 100, my = 64;
-    const bw = x1 - x0, bh = y1 - y0;
+    return { x0, y0, x1, y1 };
+  };
+
+  Drawing.prototype.fitView = function (w, h, mx, my) {
+    const b = this.box();
+    mx = mx == null ? 100 : mx;
+    my = my == null ? 64 : my;
+    const bw = b.x1 - b.x0, bh = b.y1 - b.y0;
     let s = Math.min(bw > 0 ? (w - 2 * mx) / bw : 6, bh > 0 ? (h - 2 * my) / bh : 6);
     s = clamp(s, 0.05, 6);
-    return { s, tx: (w - s * (x0 + x1)) / 2, ty: (h - s * (y0 + y1)) / 2 };
+    return { s, tx: (w - s * (b.x0 + b.x1)) / 2, ty: (h - s * (b.y0 + b.y1)) / 2 };
   };
 
   Drawing.prototype.fit = function () {
@@ -104,11 +109,20 @@
     this.svg.innerHTML = this.markup(w, h, this.view, this.sel || {}, true);
   };
 
-  // Full <svg> for printing at a fixed size.
-  Drawing.prototype.staticSvg = function (w, h) {
-    const view = this.fitView(w, h);
+  // Full <svg> at a fixed size (mx / my = room left around the layout for labels).
+  Drawing.prototype.staticSvg = function (w, h, mx, my) {
+    const view = this.fitView(w, h, mx, my);
     return `<svg class="print-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">` +
       this.markup(w, h, view, {}, false) + '</svg>';
+  };
+
+  // For printing: drawn wide enough that every label fits at full size, as tall as the layout needs;
+  // the page then scales the whole drawing to its width.
+  Drawing.prototype.printSvg = function () {
+    const w = 1800, mx = 170, my = 90, b = this.box();
+    const bw = Math.max(b.x1 - b.x0, 1), bh = b.y1 - b.y0;
+    const h = Math.round(clamp(bh * Math.min((w - 2 * mx) / bw, 6) + 2 * my, 500, 1250));
+    return this.staticSvg(w, h, mx, my);
   };
 
   Drawing.prototype.markup = function (w, h, v, sel, live) {
